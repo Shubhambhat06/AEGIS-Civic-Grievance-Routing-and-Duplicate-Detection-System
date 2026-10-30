@@ -1,0 +1,26 @@
+# dependencies
+node_modules/
+
+# secrets - never commit these
+.env
+.env.local
+.env.*.local
+
+# next.js build output
+.next/
+out/
+build/
+
+# python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# editor / OS
+.DS_Store
+.vscode/
+.idea/
+
+# logs
+*.log

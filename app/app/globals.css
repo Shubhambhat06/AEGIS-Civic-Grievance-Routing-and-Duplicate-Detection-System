@@ -1,0 +1,61 @@
+:root {
+  --bg: #ffffff;
+  --fg: #1a1a1a;
+  --muted: #666666;
+  --line: #e0e0e0;
+  --accent: #1d4ed8;
+  --danger: #b91c1c;
+  --ok: #15803d;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: var(--fg);
+  background: var(--bg);
+  line-height: 1.5;
+}
+
+.site-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--line);
+}
+.site-header strong { font-size: 20px; letter-spacing: 0.04em; }
+.tagline { color: var(--muted); font-size: 14px; }
+
+.container { max-width: 1040px; margin: 0 auto; padding: 24px; }
+
+h1 { font-size: 24px; margin: 0 0 4px; }
+h2 { font-size: 18px; margin: 28px 0 10px; }
+.sub { color: var(--muted); margin: 0 0 20px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+th { font-weight: 600; color: var(--muted); font-size: 12px; text-transform: uppercase; }
+
+label { display: block; margin: 12px 0 4px; font-size: 14px; font-weight: 500; }
+input, textarea, select {
+  width: 100%; padding: 8px 10px; font: inherit;
+  border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--fg);
+}
+textarea { min-height: 90px; resize: vertical; }
+
+button {
+  margin-top: 14px; padding: 9px 16px; font: inherit; font-weight: 500;
+  border: 0; border-radius: 4px; background: var(--accent); color: #fff; cursor: pointer;
+}
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+
+.badge { font-size: 12px; padding: 2px 7px; border-radius: 10px; background: #f0f0f0; }
+.breached { color: var(--danger); font-weight: 600; }
+.error { color: var(--danger); font-size: 14px; margin-top: 10px; }
+.success { color: var(--ok); font-size: 14px; margin-top: 10px; }
+.card { border: 1px solid var(--line); border-radius: 6px; padding: 16px; margin-bottom: 14px; }
+.row { display: flex; gap: 20px; flex-wrap: wrap; }
+.row > * { flex: 1 1 300px; }
