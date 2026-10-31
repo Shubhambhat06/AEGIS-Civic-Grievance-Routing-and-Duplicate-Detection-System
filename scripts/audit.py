@@ -192,6 +192,40 @@ check("G8 concurrency test script present",
       (ROOT / "scripts/concurrency_test.sh").exists(), True)
 check("G9 docs cover locking", "FOR UPDATE" in doc, True)
 
+print("\n=== G3. Docker, screenshots and the submission report ===")
+compose = ROOT / "docker-compose.yml"
+check("G10 docker-compose.yml present", compose.exists(), True)
+if compose.exists():
+    ct = compose.read_text()
+    check("G11 compose uses a pgvector image", "pgvector/pgvector" in ct, True)
+    check("G12 compose waits for the db healthcheck",
+          "service_healthy" in ct and "healthcheck" in ct, True)
+    check("G13 compose mounts the three init files",
+          all(f"db/{f}:/docker-entrypoint-initdb.d" in ct
+              for f in ["01_schema.sql", "02_functions.sql", "03_seed.sql"]), True)
+    check("G14 compose hard-codes no real secret",
+          "SESSION_SECRET: ${SESSION_SECRET" in ct, True)
+check("G15 app Dockerfile present", (ROOT / "app/Dockerfile").exists(), True)
+check("G16 Dockerfile runs as non-root",
+      "USER nextjs" in (ROOT / "app/Dockerfile").read_text(), True)
+check("G17 next.config enables standalone output",
+      "standalone" in (ROOT / "app/next.config.mjs").read_text(), True)
+check("G18 root .env.example present", (ROOT / ".env.example").exists(), True)
+
+shots = sorted((ROOT / "docs/screenshots").glob("*.png"))
+check("G19 at least 5 screenshots captured", len(shots) >= 5, True)
+report = ROOT / "docs/AEGIS_Submission_Report.md"
+check("G20 submission report present", report.exists(), True)
+if report.exists():
+    rt = report.read_text()
+    check("G21 report has all 9 required sections",
+          all(f"## {n}." in rt for n in range(1, 10)), True)
+    # every screenshot the report names must actually exist
+    named = set(re.findall(r"`(\d\d-[a-z-]+\.png)`", rt))
+    missing_shots = {n for n in named if not (ROOT / "docs/screenshots" / n).exists()}
+    check("G22 every screenshot named in the report exists", missing_shots, set())
+check("G23 demo script present", (ROOT / "scripts/demo.sh").exists(), True)
+
 print("\n=== H. Relational-schema diagram vs the live database ===")
 import xml.etree.ElementTree as ET
 import html as _html
