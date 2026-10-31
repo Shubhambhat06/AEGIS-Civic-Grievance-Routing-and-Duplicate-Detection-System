@@ -7,6 +7,11 @@
 # demo, or read it as a script for what to say.
 #
 # Local:   PGHOST=/tmp PGPORT=5433 PGDATABASE=aegis_test bash scripts/demo.sh
+# Docker (any host shell, including PowerShell):
+#          docker compose exec -e PGHOST=/var/run/postgresql db \
+#              bash /aegis-scripts/demo.sh
+#
+# Local:   PGHOST=/tmp PGPORT=5433 PGDATABASE=aegis_test bash scripts/demo.sh
 # Docker:  bash scripts/demo.sh            (after docker compose up)
 # =====================================================================
 set -uo pipefail

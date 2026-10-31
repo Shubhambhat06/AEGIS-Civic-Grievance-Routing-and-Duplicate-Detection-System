@@ -45,6 +45,10 @@ services:
       # The remaining files are mounted read-only somewhere convenient
       # so you can run them later without copying anything in.
       - ./db:/aegis-sql:ro
+      # scripts/ is mounted so the demo and the SQL embedding pipeline can
+      # run inside this container. That means they work from any host
+      # shell, including Windows PowerShell, with no local psql or bash.
+      - ./scripts:/aegis-scripts:ro
       - pgdata:/var/lib/postgresql/data
 
     healthcheck:

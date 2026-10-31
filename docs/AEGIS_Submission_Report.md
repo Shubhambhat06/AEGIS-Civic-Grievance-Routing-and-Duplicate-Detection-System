@@ -18,9 +18,9 @@ A municipal complaint portal that detects near-duplicate reports by meaning rath
 | SRN | Name | Section |
 |---|---|---|
 | PES1UG24AM274 | Siddanth Anil | E |
-| *(teammate SRN)* | *(teammate name)* | |
+| PES1UG24AM273 | Shubham Bhat | E |
 
-> **Before submitting:** fill in the second row, and complete the responsibility split in section 9.1.
+> **Before submitting:** complete the responsibility split in section 9.1, and confirm Shubham's section.
 
 ---
 
@@ -490,7 +490,11 @@ All nine screenshots are in `docs/screenshots/`, captured from a running instanc
 
 ### 8.1 The live demo
 
-`scripts/demo.sh` walks through seven steps with real database output at each one. Run it alongside the web interface.
+`scripts/demo.sh` walks through seven steps with real database output at each one. Run it alongside the web interface:
+
+```bash
+docker compose exec -e PGHOST=/var/run/postgresql db bash /aegis-scripts/demo.sh
+```
 
 The capture run produced this sequence end to end:
 
@@ -511,7 +515,7 @@ That is the whole product in six lines: a citizen filed a complaint in free text
 **Suggested demonstration order (about five minutes):**
 
 1. Sign in as a citizen and file a pothole complaint worded differently from the existing ones.
-2. Run the embedding pipeline — `docker compose exec db psql -U aegis -d aegis -f /aegis-sql/../scripts/embed_demo.sql`, or simply `bash scripts/demo.sh` — and point out that the complaint has acquired a department without anyone choosing one.
+2. Run the embedding pipeline — `docker compose exec db psql -U aegis -d aegis -f /aegis-scripts/embed_demo.sql` — and point out that the complaint has acquired a department without anyone choosing one.
 3. Sign in as staff, click **Check duplicates**, and show the similarity percentage against the existing report.
 4. Merge, and show the parent's report counter increment.
 5. Sign back in as the first citizen and show that their complaint now tracks the parent issue rather than vanishing.
@@ -613,5 +617,5 @@ Stated plainly, because a grader will find them anyway:
 - [x] Source code — `db/`, `app/`, `scripts/`
 - [x] README with setup and execution instructions
 - [ ] **GitHub repository link** — push the repository and paste the URL here: `________________`
-- [ ] **Teammate SRN and name** — section 2
+- [x] **Teammate SRN and name** — section 2
 - [ ] **Individual contribution table** — section 9.1

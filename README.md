@@ -10,6 +10,7 @@
 ![pgvector](https://img.shields.io/badge/pgvector-HNSW-6E4BD8)
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 ![Tests](https://img.shields.io/badge/DB%20tests-33%2F33-brightgreen)
 ![API tests](https://img.shields.io/badge/API%20tests-29%2F29-brightgreen)
 ![Normal form](https://img.shields.io/badge/schema-BCNF-blue)
@@ -40,13 +41,15 @@ Course instructor: Dr. Nagasundari S
 5. [Tech stack](#-tech-stack)
 6. [Database design](#-database-design)
 7. [Getting started](#-getting-started)
-8. [Embeddings](#-embeddings-demo-vs-real-model)
-9. [API reference](#-api-reference)
-10. [Testing](#-testing)
-11. [Repository layout](#-repository-layout)
-12. [Design decisions](#-design-decisions-worth-knowing)
-13. [Future work](#-future-work)
-14. [Documentation](#-documentation)
+8. [Guided demo](#-guided-demo)
+9. [Screenshots](#-screenshots)
+10. [Embeddings](#-embeddings-demo-vs-real-model)
+11. [API reference](#-api-reference)
+12. [Testing](#-testing)
+13. [Repository layout](#-repository-layout)
+14. [Design decisions](#-design-decisions-worth-knowing)
+15. [Future work](#-future-work)
+16. [Documentation](#-documentation)
 
 ---
 
@@ -116,7 +119,7 @@ Illegal transitions (for example reopening a closed complaint, or moving to `IN_
 │  /api/search                                             │
 │  /api/dashboard                                          │
 └───────────────────────┬──────────────────────────────────┘
-                        │  DATABASE_URL (from .env.local)
+                        │  DATABASE_URL (.env.local or Docker env)
 ┌───────────────────────▼──────────────────────────────────┐
 │  PostgreSQL 16 + pgvector                                │
 │                                                          │
@@ -144,7 +147,8 @@ Illegal transitions (for example reopening a closed complaint, or moving to `IN_
 | Web app and API | Next.js 16 (App Router), React 19 |
 | DB driver | `pg` (node-postgres) |
 | Auth | `bcryptjs` + HMAC-signed session cookie |
-| Scripts | Python 3.10+, Bash |
+| Containers | Docker Compose (`pgvector/pgvector:pg16` + Next.js standalone image) |
+| Scripts | Python 3.10+, Bash, Playwright |
 
 ---
 
@@ -195,20 +199,71 @@ All **11 relations are in BCNF**. The one deliberate denormalization, `complaint
 
 ## 🚀 Getting started
 
-### Prerequisites
+There are two ways to run AEGIS. **Docker is recommended**: the database image already has pgvector compiled in, which is the fiddliest part to install by hand.
+
+### Option A: Docker (recommended)
+
+You only need [Docker Desktop](https://www.docker.com/products/docker-desktop/). No local PostgreSQL, Node or Python.
+
+```bash
+git clone git@github.com:Shubhambhat06/AEGIS-Civic-Grievance-Routing-and-Duplicate-Detection-System.git
+cd AEGIS-Civic-Grievance-Routing-and-Duplicate-Detection-System
+cp .env.example .env
+```
+
+Edit `.env` and set at least these two values:
+
+| Variable | Description |
+|---|---|
+| `POSTGRES_PASSWORD` | Database password, anything you like |
+| `SESSION_SECRET` | Cookie-signing secret, at least 32 characters |
+
+Then start everything:
+
+```bash
+docker compose up --build
+```
+
+The first run takes a few minutes. Wait for `aegis-app | ✓ Ready`, then open <http://localhost:3000>. The schema, functions, triggers and sample data load automatically the first time the database container starts.
+
+**Confirm the vector extension loaded:**
+
+```bash
+docker compose exec db psql -U aegis -d aegis -c "\dx vector"
+docker compose exec db psql -U aegis -d aegis -c "SELECT * FROM fn_find_duplicates(18, 0.3, 5);"
+```
+
+**Useful commands**
+
+```bash
+docker compose logs -f app                                   # application logs
+docker compose exec db psql -U aegis -d aegis                # SQL prompt
+docker compose exec db psql -U aegis -d aegis -f /aegis-sql/05_test.sql   # run the DB tests
+docker compose down                                          # stop, keep the data
+```
+
+> ⚠️ **Re-seeding.** The init scripts run only when the data volume is empty, so editing `db/*.sql` and restarting changes nothing. Use `docker compose down -v` (the `-v` deletes the volume) and then `docker compose up --build`. Forgetting the `-v` is the most common reason a schema change appears to do nothing.
+
+> 💡 **Port already in use?** Set `APP_PORT` or `DB_PORT` in `.env`.
+
+> 🪟 **Windows users.** The repository's `.gitattributes` forces LF line endings, because the shell scripts and SQL files run inside Linux containers, where CRLF causes `$'\r': command not found`. If you cloned before that file existed, run `git add --renormalize .` and commit.
+
+### Option B: Local install
+
+#### Prerequisites
 
 - PostgreSQL 16 or later with the [pgvector](https://github.com/pgvector/pgvector) extension
 - Node.js 20 or later
 - Python 3.10 or later (only needed for the real embedding model)
 
-### 1. Clone the repository
+#### 1. Clone the repository
 
 ```bash
-git clone <your-repo-url>
-cd aegis-project
+git clone git@github.com:Shubhambhat06/AEGIS-Civic-Grievance-Routing-and-Duplicate-Detection-System.git
+cd AEGIS-Civic-Grievance-Routing-and-Duplicate-Detection-System
 ```
 
-### 2. Create the database
+#### 2. Create the database
 
 ```bash
 createdb aegis
@@ -221,7 +276,7 @@ If `CREATE EXTENSION` fails, pgvector is not installed. On Ubuntu:
 sudo apt install postgresql-16-pgvector
 ```
 
-### 3. Load the schema and sample data
+#### 3. Load the schema and sample data
 
 Run the files **in order**. The numbering is the dependency order.
 
@@ -235,7 +290,7 @@ psql -d aegis -f db/06_advanced_queries.sql   # CTEs, window functions, FTS (opt
 
 Loading the seed data fires the auto-routing trigger, so complaints arrive already assigned to a department.
 
-### 4. Configure the application
+#### 4. Configure the application
 
 ```bash
 cd app
@@ -258,7 +313,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 > `.env.local` is git-ignored and must **never** be committed.
 
-### 5. Run it
+#### 5. Run it
 
 ```bash
 npm install
@@ -277,7 +332,55 @@ All seeded accounts use the password `password123`.
 | Staff | `roads1@bbmp.gov.in` | Roads department queue, duplicate merging |
 | Admin | `admin@bbmp.gov.in` | All departments plus the performance dashboard |
 
-> 🎯 **Try this first:** sign in as the **staff** account and click **"Check duplicates"** on complaint **#15**. That is the feature the whole project is built around.
+> 🎯 **Try this first:** sign in as a **citizen** and file a pothole complaint worded differently from the existing ones. Run the embedding pipeline (see the demo below), then sign in as **staff** and click **"Check duplicates"** on it. That is the feature the whole project is built around.
+
+---
+
+## 🎬 Guided demo
+
+```bash
+docker compose exec -e PGHOST=/var/run/postgresql db bash /aegis-scripts/demo.sh
+```
+
+This runs inside the database container, so it works from any shell, including Windows PowerShell, with no local `psql` or `bash`. On a local install, run `bash scripts/demo.sh` instead.
+
+Seven steps, each printing real database output: the duplicate cluster, vector similarity finding it, automatic routing, the merge transaction, SLA escalation, the constraints refusing bad data, and the trigger-written audit trail. Press Enter to advance, or set `NOPAUSE=1` to run straight through.
+
+A complaint filed through the web interface is not embedded until the pipeline runs, exactly as in production. Without Python, run the SQL-only equivalent:
+
+```bash
+docker compose exec db psql -U aegis -d aegis -f /aegis-scripts/embed_demo.sql
+```
+
+Inserting the embedding fires the routing trigger, so the new complaint gets a department as a side effect.
+
+**Suggested five-minute demonstration**
+
+1. Sign in as a citizen and file a pothole complaint worded differently from the existing ones.
+2. Run the embedding pipeline and point out that the complaint now has a department, with no dropdown involved.
+3. Sign in as staff, click **Check duplicates**, and show the similarity percentage against the existing report.
+4. Merge, and show the parent's report counter go up.
+5. Sign back in as the first citizen and show that their complaint now tracks the parent issue instead of disappearing.
+6. Sign in as admin and show the dashboard, the overdue complaints in red, and the most-duplicated issues.
+
+---
+
+## 📸 Screenshots
+
+Captured from a running instance by [`scripts/screenshots.mjs`](scripts/screenshots.mjs), which drives a real browser through the whole demo flow.
+
+| Duplicate detection | Merged complaint still tracked |
+|---|---|
+| ![Duplicate detection](docs/screenshots/06-staff-duplicates.png) | ![Citizen view of a merged complaint](docs/screenshots/04-citizen-merged.png) |
+| **Cross-department queue, breached SLAs in red** | **Admin dashboard** |
+| ![Admin queue](docs/screenshots/09-admin-all-queue.png) | ![Admin dashboard](docs/screenshots/08-admin-dashboard.png) |
+
+All nine screenshots are in [`docs/screenshots/`](docs/screenshots). To regenerate them:
+
+```bash
+npm install playwright && npx playwright install chromium
+BASE=http://localhost:3000 node scripts/screenshots.mjs
+```
 
 ---
 
@@ -329,7 +432,7 @@ All routes are Next.js route handlers under `app/app/api/`. Every route other th
 | **Database tests**: constraints, triggers, rollback, search, views, SLA, cascades, CTEs/windows | `bash scripts/run_tests.sh` | **33 / 33** |
 | **Concurrency test**: two sessions race to merge the same complaint | `bash scripts/concurrency_test.sh` | **PASS** |
 | **API tests**: auth, role-based access, both workflows, search, logout | see below | **29 / 29** |
-| **Consistency audit**: docs and diagrams vs the live schema | `python3 scripts/audit.py` | **59 / 59** |
+| **Consistency audit**: docs, diagrams, Docker setup and screenshots vs the live schema | `python3 scripts/audit.py` | **92 / 92** |
 
 `run_tests.sh` creates a throwaway database, runs all six SQL files, and reports PASS/FAIL per check.
 
@@ -354,6 +457,9 @@ BASE=http://localhost:3000 bash scripts/api_test.sh
 
 ```
 aegis-project/
+├── docker-compose.yml             db (pgvector) + app, healthcheck, auto-seeding
+├── .env.example                   Docker Compose configuration template
+├── .gitattributes                 forces LF so scripts run inside Linux containers
 ├── db/
 │   ├── 01_schema.sql              tables, types, constraints, indexes, views
 │   ├── 02_functions.sql           stored functions and triggers
@@ -362,6 +468,7 @@ aegis-project/
 │   ├── 05_test.sql                33 database tests
 │   └── 06_advanced_queries.sql    CTEs, window functions, recursive queries, FTS
 ├── app/                           Next.js application
+│   ├── Dockerfile                 multi-stage build, non-root runtime
 │   ├── lib/
 │   │   ├── db.js                  connection pool, parameterised query helper
 │   │   └── auth.js                bcrypt login, HMAC session cookie, role guard
@@ -370,15 +477,19 @@ aegis-project/
 │       ├── citizen/  staff/  admin/   role-specific pages
 │       └── page.jsx               login
 ├── scripts/
+│   ├── demo.sh                    guided 7-step demonstration
 │   ├── embed.py                   embedding pipeline (all-MiniLM-L6-v2)
+│   ├── embed_demo.sql             SQL-only embedding pipeline for demos
+│   ├── screenshots.mjs            Playwright capture of the demo flow
 │   ├── run_tests.sh               database test runner
 │   ├── api_test.sh                end-to-end API test runner
 │   ├── concurrency_test.sh        two-session merge race
 │   └── audit.py                   docs/diagrams vs the live schema
 ├── docs/
 │   ├── AEGIS_Project_Documentation.md   full project write-up
+│   ├── AEGIS_Submission_Report.md       9-section submission report
 │   ├── normalization.md                 FDs and 1NF–BCNF analysis
-│   └── screenshots/
+│   └── screenshots/                     9 captured screenshots
 └── diagrams/
     ├── aegis_erd_chen.*                 ER diagram (Chen notation)
     └── aegis_relational_schema.*        relational schema with FK arrows
@@ -419,6 +530,7 @@ These are easy to miss when reading the code.
 | Document | Contents |
 |---|---|
 | [`docs/AEGIS_Project_Documentation.md`](docs/AEGIS_Project_Documentation.md) | Problem statement, objectives, scope, data dictionary, vector implementation, concurrency analysis, test results, requirement coverage |
+| [`docs/AEGIS_Submission_Report.md`](docs/AEGIS_Submission_Report.md) | The 9-section submission report: abstract, stack, SQL and vector commands, project tree, screenshots, rubric status |
 | [`docs/normalization.md`](docs/normalization.md) | Functional dependencies for every relation and the path to BCNF |
 | [`diagrams/`](diagrams) | ER diagram and relational schema (PNG and editable `.drawio`) |
 
