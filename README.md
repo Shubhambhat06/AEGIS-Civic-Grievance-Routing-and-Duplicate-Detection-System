@@ -1,2 +1,432 @@
-# AEGIS-Civic-Grievance-Routing-and-Duplicate-Detection-System
-Civic complaint portal that detects duplicate reports and auto-routes grievances to the right department using vector similarity search. PostgreSQL + pgvector + Next.js.
+<div align="center">
+
+# 🛡️ AEGIS
+
+### Civic Grievance Routing and Duplicate Detection System
+
+*Stop the same pothole from becoming thirty tickets, and stop complaints from landing in the wrong department.*
+
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql&logoColor=white)
+![pgvector](https://img.shields.io/badge/pgvector-HNSW-6E4BD8)
+![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)
+![Tests](https://img.shields.io/badge/DB%20tests-33%2F33-brightgreen)
+![API tests](https://img.shields.io/badge/API%20tests-29%2F29-brightgreen)
+![Normal form](https://img.shields.io/badge/schema-BCNF-blue)
+
+**DBMS Experiential Learning, Level 3 Project · PES University**
+
+</div>
+
+---
+
+## 👥 Team
+
+| Name | SRN |
+|---|---|
+| **Siddanth Anil** | `PES1UG24AM274` |
+| **Shubham Bhat** | `PES1UG24AM273` |
+
+Course instructor: Dr. Nagasundari S
+
+---
+
+## 📑 Table of contents
+
+1. [The problem](#-the-problem)
+2. [The solution](#-the-solution)
+3. [Key features](#-key-features)
+4. [Architecture](#-architecture)
+5. [Tech stack](#-tech-stack)
+6. [Database design](#-database-design)
+7. [Getting started](#-getting-started)
+8. [Embeddings](#-embeddings-demo-vs-real-model)
+9. [API reference](#-api-reference)
+10. [Testing](#-testing)
+11. [Repository layout](#-repository-layout)
+12. [Design decisions](#-design-decisions-worth-knowing)
+13. [Future work](#-future-work)
+14. [Documentation](#-documentation)
+
+---
+
+## 🧩 The problem
+
+Municipal complaint portals suffer from two chronic problems that have nothing to do with how hard the staff work:
+
+- **The same issue is reported many times.** When a pothole opens on a busy road, dozens of people report it. Each report becomes a separate ticket, staff close them one by one, and the first reporter never learns that thirty neighbours reported the same thing.
+- **Complaints reach the wrong department.** Portals make citizens pick a category from a dropdown. Citizens guess wrong, and the complaint sits in the wrong queue with the SLA clock running.
+
+Both share one root cause: a complaint is **unstructured text**, and a conventional database can only match it on exact keywords.
+
+## 💡 The solution
+
+AEGIS treats the complaint description as what it really is, unstructured text. Every complaint is converted into a **384-dimension vector embedding**, which lets the system:
+
+1. **Detect near-duplicates** that share no keywords. *"Huge pothole near the bus stop"* and *"dangerous crater on main road"* are recognised as the same hole, and staff can merge them into a single tracked issue.
+2. **Route automatically** by sending a new complaint to the department that resolved the most similar past complaints, instead of trusting a dropdown.
+
+PostgreSQL holds the entities and enforces the rules. pgvector answers the similarity questions SQL alone cannot. They meet in single queries that **filter structurally and rank semantically**.
+
+---
+
+## ✨ Key features
+
+| Area | What you get |
+|---|---|
+| 🔍 **Duplicate detection** | Cosine-similarity search (pgvector + HNSW), restricted to the same ward, with a staff merge workflow |
+| 🧭 **Auto-routing** | Similarity-weighted vote over resolution history, fired by a trigger when an embedding arrives |
+| ⏱️ **SLA tracking** | Deadline stored per complaint, with automatic escalation of overdue items |
+| 👤 **Citizen portal** | File and track complaints; merged reports show the parent issue's status |
+| 🧑‍💼 **Staff queue** | Work queue sorted by SLA urgency, status updates, duplicate review and merge |
+| 📊 **Admin dashboard** | Per-department resolution times, breach rates, most-duplicated issues |
+| 🔎 **Full-text search** | Weighted `tsvector` with GIN index and `websearch_to_tsquery` |
+| 🔐 **Security** | bcrypt passwords, HMAC-signed `httpOnly` cookies, role-based access, parameterised SQL only |
+| 🧾 **Audit trail** | Every status change logged by a database trigger, regardless of which client wrote it |
+
+### Complaint lifecycle
+
+```
+OPEN ──► ROUTED ──► IN_PROGRESS ──► RESOLVED
+  │         │            │
+  │         └────────────┴──► ESCALATED   (SLA deadline passed)
+  └──────────────────────────► MERGED     (folded into a parent complaint)
+```
+
+Illegal transitions (for example reopening a closed complaint, or moving to `IN_PROGRESS` with no assignee) are blocked by a database trigger.
+
+---
+
+## 🏗️ Architecture
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  Browser                                                 │
+│  /  (login)   /citizen   /staff   /admin                 │
+└───────────────────────┬──────────────────────────────────┘
+                        │  fetch(), httpOnly signed cookie
+┌───────────────────────▼──────────────────────────────────┐
+│  Next.js 16 (App Router)                                 │
+│                                                          │
+│  Route handlers        lib/auth.js      lib/db.js        │
+│  /api/auth/login       bcrypt compare   pg Pool          │
+│  /api/complaints       HMAC cookie      parameterised    │
+│  /api/complaints/[id]  requireRole()    queries only     │
+│  /api/.../duplicates                                     │
+│  /api/search                                             │
+│  /api/dashboard                                          │
+└───────────────────────┬──────────────────────────────────┘
+                        │  DATABASE_URL (from .env.local)
+┌───────────────────────▼──────────────────────────────────┐
+│  PostgreSQL 16 + pgvector                                │
+│                                                          │
+│  11 tables · 15 FKs · 19 CHECKs · 23 indexes             │
+│  3 triggers · 6 stored functions · 2 views + 1 matview   │
+└───────────────────────▲──────────────────────────────────┘
+                        │
+            scripts/embed.py  (all-MiniLM-L6-v2, CPU)
+            writes complaint_embedding → fires auto-routing
+```
+
+**Layering principle: business rules live in the database, not the web layer.** The web layer authenticates the user, decides what they may ask for, and calls a stored function. The rules therefore survive a second client being written against the same database, and the test suite can verify them with `psql` alone.
+
+**The embedding pipeline is a separate process.** Generating an embedding needs a Python model that has no place inside a web request. Filing a complaint stays fast, and the complaint waits as `OPEN` until its embedding arrives, at which point the auto-routing trigger fires.
+
+---
+
+## 🧰 Tech stack
+
+| Layer | Technology |
+|---|---|
+| Database | PostgreSQL 16 |
+| Vector search | [pgvector](https://github.com/pgvector/pgvector), `VECTOR(384)`, HNSW index, cosine distance |
+| Embedding model | `sentence-transformers/all-MiniLM-L6-v2` |
+| Web app and API | Next.js 16 (App Router), React 19 |
+| DB driver | `pg` (node-postgres) |
+| Auth | `bcryptjs` + HMAC-signed session cookie |
+| Scripts | Python 3.10+, Bash |
+
+---
+
+## 🗄️ Database design
+
+### ER diagram and relational schema
+
+| ER diagram (Chen notation) | Relational schema |
+|---|---|
+| ![ERD](diagrams/aegis_erd_chen.png) | ![Relational schema](diagrams/aegis_relational_schema.png) |
+
+Editable sources are in [`diagrams/`](diagrams) as `.drawio` files.
+
+### Tables
+
+| Table | Purpose |
+|---|---|
+| `ward` | Geographic units (name, zone) |
+| `citizen` | Registered citizens |
+| `citizen_phone` | Multivalued phone numbers (keeps `citizen` in 1NF) |
+| `department` | Departments with their default SLA hours |
+| `staff` | Staff and admin accounts |
+| `complaint` | The central entity: text, status, priority, location, SLA deadline |
+| `complaint_attachment` | Multivalued attachment URLs |
+| `complaint_embedding` | 384-dim vector per complaint, HNSW-indexed |
+| `duplicate_link` | Child → parent merge record with similarity score |
+| `status_history` | Audit trail written by trigger |
+| `feedback` | One citizen rating per complaint |
+
+### Database features
+
+| # | Feature | Where |
+|---|---|---|
+| 1 | **Transactions and row locking** | `fn_merge_duplicate` uses `SELECT … FOR UPDATE` so two staff cannot merge the same complaint at once |
+| 2 | **Views** | `v_open_queue`, `v_citizen_complaints`, materialized `mv_department_performance` |
+| 3 | **Stored functions** | `fn_find_duplicates`, `fn_route_complaint`, `fn_merge_duplicate`, `fn_file_complaint`, `fn_escalate_overdue` |
+| 4 | **Triggers** | `t_complaint_status_audit`, `t_complaint_validate`, `t_embedding_auto_route` |
+| 5 | **Indexing** | B-tree, composite, GIN, HNSW, and two partial indexes (23 total) |
+| 6 | **Full-text search** | Generated, weighted `tsvector` column with GIN index |
+| 7 | **Vector similarity search** | pgvector HNSW with `vector_cosine_ops` |
+| 8 | **CTEs, window functions, recursive queries** | `db/06_advanced_queries.sql` |
+
+### Normalization
+
+All **11 relations are in BCNF**. The one deliberate denormalization, `complaint.duplicate_count`, is not a normal-form violation, since it depends on the key. It is maintained atomically inside the merge function and verified by tests **T3.2** and **T3.5** and by audit check **F5**. The full functional-dependency analysis is in [`docs/normalization.md`](docs/normalization.md).
+
+---
+
+## 🚀 Getting started
+
+### Prerequisites
+
+- PostgreSQL 16 or later with the [pgvector](https://github.com/pgvector/pgvector) extension
+- Node.js 20 or later
+- Python 3.10 or later (only needed for the real embedding model)
+
+### 1. Clone the repository
+
+```bash
+git clone <your-repo-url>
+cd aegis-project
+```
+
+### 2. Create the database
+
+```bash
+createdb aegis
+psql -d aegis -c "CREATE EXTENSION IF NOT EXISTS vector;"
+```
+
+If `CREATE EXTENSION` fails, pgvector is not installed. On Ubuntu:
+
+```bash
+sudo apt install postgresql-16-pgvector
+```
+
+### 3. Load the schema and sample data
+
+Run the files **in order**. The numbering is the dependency order.
+
+```bash
+psql -d aegis -f db/01_schema.sql      # tables, constraints, indexes, views
+psql -d aegis -f db/02_functions.sql   # stored functions and triggers
+psql -d aegis -f db/03_seed.sql        # sample data (24 complaints)
+psql -d aegis -f db/04_queries.sql     # 15 report queries (optional, read-only)
+psql -d aegis -f db/06_advanced_queries.sql   # CTEs, window functions, FTS (optional)
+```
+
+Loading the seed data fires the auto-routing trigger, so complaints arrive already assigned to a department.
+
+### 4. Configure the application
+
+```bash
+cd app
+cp .env.example .env.local
+```
+
+Edit `.env.local`:
+
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `PGPOOL_MAX` | Maximum pooled connections (default `10`) |
+| `SESSION_SECRET` | Cookie-signing secret, at least 32 characters |
+
+Generate a secret with:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+> `.env.local` is git-ignored and must **never** be committed.
+
+### 5. Run it
+
+```bash
+npm install
+npm run dev
+```
+
+Open <http://localhost:3000>.
+
+### 🔑 Sample accounts
+
+All seeded accounts use the password `password123`.
+
+| Role | Email | What you see |
+|---|---|---|
+| Citizen | `arjun.menon@example.com` | File complaints, track your own |
+| Staff | `roads1@bbmp.gov.in` | Roads department queue, duplicate merging |
+| Admin | `admin@bbmp.gov.in` | All departments plus the performance dashboard |
+
+> 🎯 **Try this first:** sign in as the **staff** account and click **"Check duplicates"** on complaint **#15**. That is the feature the whole project is built around.
+
+---
+
+## 🧠 Embeddings: demo vs real model
+
+The seed data ships with embeddings from `fn_demo_embedding`, a **pure-SQL fallback** defined in `db/03_seed.sql`. It uses the hashing trick (each word hashed into one of 384 buckets, then L2-normalised), so the whole system can be demonstrated with nothing but `psql`.
+
+To use the **real model**:
+
+```bash
+pip install -r scripts/requirements.txt
+export DATABASE_URL=postgresql://user:pass@localhost:5432/aegis
+python3 scripts/embed.py --recompute
+```
+
+This replaces every embedding with one from `sentence-transformers/all-MiniLM-L6-v2`. Duplicate detection and routing both improve noticeably, because the model encodes *meaning* rather than shared spelling.
+
+| | Demo embedding | Real model |
+|---|---|---|
+| Needs Python | No | Yes |
+| Matches on | Shared words | Meaning |
+| Routing accuracy on seed data | 8 / 10 | Re-measure after recompute |
+
+---
+
+## 🔌 API reference
+
+All routes are Next.js route handlers under `app/app/api/`. Every route other than login requires a valid session, and role checks are enforced server-side.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/auth/login` | Sign in, sets signed `httpOnly` cookie |
+| `POST` | `/api/auth/logout` | Invalidate the session |
+| `GET` | `/api/complaints` | List complaints (scoped to the caller's role) |
+| `POST` | `/api/complaints` | File a complaint (citizen) |
+| `GET` | `/api/complaints/[id]` | Complaint detail |
+| `PATCH` | `/api/complaints/[id]` | Update status (staff, own department only) |
+| `GET` | `/api/complaints/[id]/duplicates` | Find duplicate candidates (staff) |
+| `POST` | `/api/complaints/[id]/duplicates` | Merge a duplicate into a parent (staff) |
+| `GET` | `/api/search` | Full-text search |
+| `GET` | `/api/dashboard` | Per-department statistics (admin only) |
+
+---
+
+## ✅ Testing
+
+| Suite | Command | Result |
+|---|---|---|
+| **Database tests**: constraints, triggers, rollback, search, views, SLA, cascades, CTEs/windows | `bash scripts/run_tests.sh` | **33 / 33** |
+| **Concurrency test**: two sessions race to merge the same complaint | `bash scripts/concurrency_test.sh` | **PASS** |
+| **API tests**: auth, role-based access, both workflows, search, logout | see below | **29 / 29** |
+| **Consistency audit**: docs and diagrams vs the live schema | `python3 scripts/audit.py` | **59 / 59** |
+
+`run_tests.sh` creates a throwaway database, runs all six SQL files, and reports PASS/FAIL per check.
+
+**API tests** need the app running:
+
+```bash
+cd app && npm run build && npm start &
+BASE=http://localhost:3000 bash scripts/api_test.sh
+```
+
+**Highlights of what the tests prove**
+
+- Wrong password and unknown account return the *same* 401, so account existence cannot be probed.
+- A tampered session cookie is rejected by the HMAC check.
+- A failed merge **rolls back completely**, leaving no stray link and an unchanged counter.
+- In the concurrency race, session B blocks on A's lock, re-reads the row after A commits, and is rejected by validation. Exactly one merge takes effect.
+- `npm audit` on the production dependency tree reports **0 vulnerabilities**.
+
+---
+
+## 📁 Repository layout
+
+```
+aegis-project/
+├── db/
+│   ├── 01_schema.sql              tables, types, constraints, indexes, views
+│   ├── 02_functions.sql           stored functions and triggers
+│   ├── 03_seed.sql                sample data + SQL-only demo embedder
+│   ├── 04_queries.sql             15 report queries used by the app and write-up
+│   ├── 05_test.sql                33 database tests
+│   └── 06_advanced_queries.sql    CTEs, window functions, recursive queries, FTS
+├── app/                           Next.js application
+│   ├── lib/
+│   │   ├── db.js                  connection pool, parameterised query helper
+│   │   └── auth.js                bcrypt login, HMAC session cookie, role guard
+│   └── app/
+│       ├── api/                   route handlers
+│       ├── citizen/  staff/  admin/   role-specific pages
+│       └── page.jsx               login
+├── scripts/
+│   ├── embed.py                   embedding pipeline (all-MiniLM-L6-v2)
+│   ├── run_tests.sh               database test runner
+│   ├── api_test.sh                end-to-end API test runner
+│   ├── concurrency_test.sh        two-session merge race
+│   └── audit.py                   docs/diagrams vs the live schema
+├── docs/
+│   ├── AEGIS_Project_Documentation.md   full project write-up
+│   ├── normalization.md                 FDs and 1NF–BCNF analysis
+│   └── screenshots/
+└── diagrams/
+    ├── aegis_erd_chen.*                 ER diagram (Chen notation)
+    └── aegis_relational_schema.*        relational schema with FK arrows
+```
+
+---
+
+## 🧭 Design decisions worth knowing
+
+These are easy to miss when reading the code.
+
+**Business rules live in the database.** The audit trail is a trigger, not application code, so it fires whether the write came from the app, a stored function, or a manual `psql` session. The merge is a stored function, so its three steps are atomic no matter who calls it.
+
+**The SLA deadline is stored, not computed.** It is a snapshot taken at filing time. Deriving it from the department's current policy would silently rewrite the deadline of every historical complaint whenever that policy changed. This is also why `complaint` stays in BCNF.
+
+**Duplicate search is restricted to the same ward.** Two potholes in different parts of the city are not the same pothole, however similar the wording. This one filter stops the feature from being actively harmful.
+
+**Routing weights neighbours by the square of their similarity.** A plain head-count let a department that merely appears more often in the archive outvote the single obvious match. Squaring made one close neighbour decisive and lifted accuracy from 6/10 to 8/10 on the seed data.
+
+**Locking, not just constraints.** A `UNIQUE` key would stop the second `INSERT` of a racing merge, but only after both sessions had read stale state. `SELECT … FOR UPDATE` makes the read-then-write sequence atomic, with consistent lock ordering (child before parent) to prevent deadlock.
+
+**The embedding lives in its own table.** The vector arrives asynchronously, after the complaint row exists, and at roughly 1.5 KB it would bloat ordinary complaint reads.
+
+---
+
+## 🔮 Future work
+
+1. **Photo embeddings.** CLIP image vectors alongside text, to catch duplicates described differently but photographed identically.
+2. **Geographic clustering.** Use the stored latitude and longitude with PostGIS and a radius filter, which is finer than the ward filter.
+3. **Routing confidence.** Return a confidence score so only confident routings are automatic and the rest go to human triage.
+4. **Feedback loop.** Treat staff overrides of routing as training signal.
+5. **Partition `status_history`.** Range-partition the audit trail by month as it grows.
+
+---
+
+## 📚 Documentation
+
+| Document | Contents |
+|---|---|
+| [`docs/AEGIS_Project_Documentation.md`](docs/AEGIS_Project_Documentation.md) | Problem statement, objectives, scope, data dictionary, vector implementation, concurrency analysis, test results, requirement coverage |
+| [`docs/normalization.md`](docs/normalization.md) | Functional dependencies for every relation and the path to BCNF |
+| [`diagrams/`](diagrams) | ER diagram and relational schema (PNG and editable `.drawio`) |
+
+---
+
+<div align="center">
+
+**Built by Siddanth Anil (`PES1UG24AM274`) and Shubham Bhat (`PES1UG24AM273`)**
+PES University · DBMS Level 3 Project
+
+</div>
