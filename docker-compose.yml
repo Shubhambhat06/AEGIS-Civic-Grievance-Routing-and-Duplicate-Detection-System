@@ -1,0 +1,98 @@
+# =====================================================================
+# AEGIS - full stack in two containers
+#
+#   db   PostgreSQL 16 with the pgvector extension already installed
+#   app  the Next.js application
+#
+# Quick start:
+#     docker compose up --build
+#     open http://localhost:3000
+#
+# The database schema and sample data load automatically the first time
+# the db container starts. See the note on re-seeding at the bottom.
+# =====================================================================
+
+services:
+
+  db:
+    # This image is plain PostgreSQL 16 with pgvector compiled in, so
+    # CREATE EXTENSION vector works with no extra setup. That is the
+    # main reason the project ships a Docker setup at all - installing
+    # pgvector by hand is the fiddliest part of running AEGIS.
+    image: pgvector/pgvector:pg16
+    container_name: aegis-db
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER:-aegis}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aegis_dev_password}
+      POSTGRES_DB:       ${POSTGRES_DB:-aegis}
+
+    ports:
+      # Exposed so you can connect with psql or a GUI client from the
+      # host. Change the left-hand number if 5432 is already in use.
+      - "${DB_PORT:-5432}:5432"
+
+    volumes:
+      # Anything in /docker-entrypoint-initdb.d runs once, in
+      # alphabetical order, the first time the data directory is empty.
+      # Only the three setup files are mounted: the query and test files
+      # are run by hand, because initialisation should build the
+      # database, not test it.
+      - ./db/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./db/02_functions.sql:/docker-entrypoint-initdb.d/02_functions.sql:ro
+      - ./db/03_seed.sql:/docker-entrypoint-initdb.d/03_seed.sql:ro
+      # The remaining files are mounted read-only somewhere convenient
+      # so you can run them later without copying anything in.
+      - ./db:/aegis-sql:ro
+      - pgdata:/var/lib/postgresql/data
+
+    healthcheck:
+      # The app container waits for this to pass. Without it, the app
+      # starts while PostgreSQL is still running the init scripts and
+      # the first request fails.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aegis} -d ${POSTGRES_DB:-aegis}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: aegis-app
+    restart: unless-stopped
+
+    environment:
+      # Note the host is "db", not localhost: inside the Compose
+      # network, containers reach each other by service name.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-aegis}:${POSTGRES_PASSWORD:-aegis_dev_password}@db:5432/${POSTGRES_DB:-aegis}
+      SESSION_SECRET: ${SESSION_SECRET:-dev_only_secret_change_me_before_any_real_deployment_32}
+      PGPOOL_MAX: ${PGPOOL_MAX:-10}
+      NODE_ENV: production
+
+    ports:
+      - "${APP_PORT:-3000}:3000"
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+
+# ---------------------------------------------------------------------
+# Re-seeding
+#
+# The init scripts run ONLY when the data directory is empty. After the
+# first start, editing db/*.sql and restarting changes nothing.
+#
+# To wipe the database and load everything again:
+#
+#     docker compose down -v        # -v deletes the pgdata volume
+#     docker compose up --build
+#
+# Forgetting the -v is the single most common reason a schema change
+# appears to have no effect.
+# ---------------------------------------------------------------------
