@@ -71,6 +71,11 @@ export async function PATCH(request, context) {
     return NextResponse.json({ error: 'Invalid status value' }, { status: 400 });
   }
 
+  // "Start work" from the staff screen sends IN_PROGRESS with no assignee:
+  // the person clicking it is taking the complaint on.
+  const assignee =
+    assignedStaffId ?? (status === 'IN_PROGRESS' && session.type === 'staff' ? session.id : null);
+
   try {
     // COALESCE leaves a column unchanged when the caller omits it.
     // A plain STAFF member can only touch complaints in their own
@@ -82,7 +87,7 @@ export async function PATCH(request, context) {
         WHERE complaint_id = $1
           AND ($4::INT IS NULL OR dept_id = $4)
       RETURNING complaint_id, status, assigned_staff_id`,
-      [id, status ?? null, assignedStaffId ?? null,
+      [id, status ?? null, assignee,
        session.role === 'ADMIN' ? null : session.deptId]
     );
 

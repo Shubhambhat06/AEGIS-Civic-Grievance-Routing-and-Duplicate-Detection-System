@@ -74,6 +74,9 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-aegis}:${POSTGRES_PASSWORD:-aegis_dev_password}@db:5432/${POSTGRES_DB:-aegis}
       SESSION_SECRET: ${SESSION_SECRET:-dev_only_secret_change_me_before_any_real_deployment_32}
       PGPOOL_MAX: ${PGPOOL_MAX:-10}
+      # Route a complaint the moment it is filed, using the SQL demo
+      # embedding. Set to false to rely on scripts/embed.py instead.
+      DEMO_EMBEDDINGS: ${DEMO_EMBEDDINGS:-true}
       NODE_ENV: production
 
     ports:

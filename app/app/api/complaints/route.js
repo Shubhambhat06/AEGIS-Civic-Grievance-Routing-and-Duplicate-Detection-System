@@ -16,11 +16,15 @@ export async function GET(request) {
   // on the server; the client cannot ask for someone else's data.
   if (session.type === 'citizen') {
     const rows = await query(
-      `SELECT complaint_id, title, status, filed_at, resolved_at,
-              parent_complaint_id, merged_into_title, merged_into_status
-         FROM v_citizen_complaints
-        WHERE citizen_id = $1
-        ORDER BY filed_at DESC`,
+      `SELECT v.complaint_id, v.title, v.status, v.filed_at, v.resolved_at,
+              v.parent_complaint_id, v.merged_into_title, v.merged_into_status,
+              c.priority, c.sla_deadline, d.dept_name, w.ward_name
+         FROM v_citizen_complaints v
+         JOIN complaint c       ON c.complaint_id = v.complaint_id
+         JOIN ward w            ON w.ward_id      = c.ward_id
+         LEFT JOIN department d ON d.dept_id      = c.dept_id
+        WHERE v.citizen_id = $1
+        ORDER BY v.filed_at DESC`,
       [session.id]
     );
     return NextResponse.json({ complaints: rows });
@@ -63,6 +67,7 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Description must be at least 15 characters' }, { status: 400 });
   }
 
+  let complaintId;
   try {
     // fn_file_complaint keeps the SLA-deadline rule inside the database.
     const [row] = await query(
@@ -77,8 +82,7 @@ export async function POST(request) {
         longitude ?? null,
       ]
     );
-
-    return NextResponse.json({ complaintId: row.complaint_id }, { status: 201 });
+    complaintId = row.complaint_id;
   } catch (err) {
     // A constraint violation means the data was genuinely invalid.
     if (err.code === '23514' || err.code === '23503') {
@@ -87,4 +91,54 @@ export async function POST(request) {
     console.error('Failed to file complaint:', err);
     return NextResponse.json({ error: 'Could not file complaint' }, { status: 500 });
   }
+
+  // -----------------------------------------------------------------
+  // Demo embedding, run inline.
+  //
+  // In production the embedding is produced asynchronously by
+  // scripts/embed.py. For a demonstration it is far clearer if the
+  // citizen sees the outcome straight away, so by default we embed the
+  // complaint here with the SQL-only fn_demo_embedding. Inserting the
+  // embedding fires t_embedding_auto_route, which assigns the department.
+  //
+  // Set DEMO_EMBEDDINGS=false to switch this off and rely on embed.py.
+  // A failure here never fails the filing: the complaint is already
+  // saved and simply waits for the pipeline.
+  // -----------------------------------------------------------------
+  let outcome = { department: null, deadline: null, similarCount: 0 };
+
+  if (process.env.DEMO_EMBEDDINGS !== 'false') {
+    try {
+      await query(
+        `INSERT INTO complaint_embedding (complaint_id, embedding, model_name)
+         SELECT complaint_id, fn_demo_embedding(title || ' ' || description), 'demo-hashing-384'
+           FROM complaint
+          WHERE complaint_id = $1
+         ON CONFLICT (complaint_id) DO NOTHING`,
+        [complaintId]
+      );
+
+      const [routed] = await query(
+        `SELECT d.dept_name, c.sla_deadline
+           FROM complaint c
+           LEFT JOIN department d ON d.dept_id = c.dept_id
+          WHERE c.complaint_id = $1`,
+        [complaintId]
+      );
+      const [similar] = await query(
+        `SELECT COUNT(*)::INT AS n FROM fn_find_duplicates($1, 0.5, 5)`,
+        [complaintId]
+      );
+
+      outcome = {
+        department: routed?.dept_name ?? null,
+        deadline: routed?.sla_deadline ?? null,
+        similarCount: similar?.n ?? 0,
+      };
+    } catch (err) {
+      console.warn('Inline demo embedding skipped:', err.message);
+    }
+  }
+
+  return NextResponse.json({ complaintId, ...outcome }, { status: 201 });
 }

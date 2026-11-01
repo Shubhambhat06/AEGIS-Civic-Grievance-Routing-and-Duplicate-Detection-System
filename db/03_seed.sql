@@ -108,14 +108,14 @@ INSERT INTO department (dept_name, category, default_sla_hours) VALUES
 --    hashes the password before it ever reaches the database.
 -- ---------------------------------------------------------------------
 INSERT INTO staff (email, full_name, password_hash, role, dept_id) VALUES
-    ('admin@bbmp.gov.in',    'Priya Raghavan',  '$2a$10$7MY5QZUxQwqgx/Jo1Xhdce8VR4x56U6sPD6ibsFPh8ik.jtFdwOxy', 'ADMIN', 1),
-    ('roads1@bbmp.gov.in',   'Mahesh Kumar',    '$2a$10$7MY5QZUxQwqgx/Jo1Xhdce8VR4x56U6sPD6ibsFPh8ik.jtFdwOxy', 'STAFF', 1),
-    ('roads2@bbmp.gov.in',   'Anita Desai',     '$2a$10$7MY5QZUxQwqgx/Jo1Xhdce8VR4x56U6sPD6ibsFPh8ik.jtFdwOxy', 'STAFF', 1),
-    ('water1@bbmp.gov.in',   'Ravi Shankar',    '$2a$10$7MY5QZUxQwqgx/Jo1Xhdce8VR4x56U6sPD6ibsFPh8ik.jtFdwOxy', 'STAFF', 2),
-    ('waste1@bbmp.gov.in',   'Fatima Sheikh',   '$2a$10$7MY5QZUxQwqgx/Jo1Xhdce8VR4x56U6sPD6ibsFPh8ik.jtFdwOxy', 'STAFF', 3),
-    ('light1@bbmp.gov.in',   'Joseph Mathew',   '$2a$10$7MY5QZUxQwqgx/Jo1Xhdce8VR4x56U6sPD6ibsFPh8ik.jtFdwOxy', 'STAFF', 4),
-    ('parks1@bbmp.gov.in',   'Lakshmi Iyer',    '$2a$10$7MY5QZUxQwqgx/Jo1Xhdce8VR4x56U6sPD6ibsFPh8ik.jtFdwOxy', 'STAFF', 5),
-    ('drains1@bbmp.gov.in',  'Suresh Gowda',    '$2a$10$7MY5QZUxQwqgx/Jo1Xhdce8VR4x56U6sPD6ibsFPh8ik.jtFdwOxy', 'STAFF', 6);
+    ('admin@aegis.example',    'Priya Raghavan',  '$2a$10$7MY5QZUxQwqgx/Jo1Xhdce8VR4x56U6sPD6ibsFPh8ik.jtFdwOxy', 'ADMIN', 1),
+    ('roads1@aegis.example',   'Mahesh Kumar',    '$2a$10$7MY5QZUxQwqgx/Jo1Xhdce8VR4x56U6sPD6ibsFPh8ik.jtFdwOxy', 'STAFF', 1),
+    ('roads2@aegis.example',   'Anita Desai',     '$2a$10$7MY5QZUxQwqgx/Jo1Xhdce8VR4x56U6sPD6ibsFPh8ik.jtFdwOxy', 'STAFF', 1),
+    ('water1@aegis.example',   'Ravi Shankar',    '$2a$10$7MY5QZUxQwqgx/Jo1Xhdce8VR4x56U6sPD6ibsFPh8ik.jtFdwOxy', 'STAFF', 2),
+    ('waste1@aegis.example',   'Fatima Sheikh',   '$2a$10$7MY5QZUxQwqgx/Jo1Xhdce8VR4x56U6sPD6ibsFPh8ik.jtFdwOxy', 'STAFF', 3),
+    ('light1@aegis.example',   'Joseph Mathew',   '$2a$10$7MY5QZUxQwqgx/Jo1Xhdce8VR4x56U6sPD6ibsFPh8ik.jtFdwOxy', 'STAFF', 4),
+    ('parks1@aegis.example',   'Lakshmi Iyer',    '$2a$10$7MY5QZUxQwqgx/Jo1Xhdce8VR4x56U6sPD6ibsFPh8ik.jtFdwOxy', 'STAFF', 5),
+    ('drains1@aegis.example',  'Suresh Gowda',    '$2a$10$7MY5QZUxQwqgx/Jo1Xhdce8VR4x56U6sPD6ibsFPh8ik.jtFdwOxy', 'STAFF', 6);
 
 
 -- ---------------------------------------------------------------------
@@ -155,6 +155,11 @@ INSERT INTO citizen_phone (citizen_id, phone) VALUES
 --
 --    These give fn_route_complaint something to learn from: each one
 --    already carries the department that actually resolved it.
+--
+--    Resolution times are deliberately mixed: Water Supply, Street
+--    Lighting and Stormwater Drains resolve inside their SLA, while
+--    Roads, Solid Waste and Parks overrun it. That gives the admin
+--    dashboard's "time to resolve against target" chart a real contrast.
 --    They are inserted with explicit dates in the past.
 -- ---------------------------------------------------------------------
 INSERT INTO complaint
@@ -175,13 +180,13 @@ VALUES
 -- Water Supply (dept 2)
  (2, 2, 1, 4, 'No water supply for three days',
   'Our building has had no water supply from the municipal line for three days now. Tanker deliveries are not keeping up.',
-  'RESOLVED', 'CRITICAL', now() - interval '80 days', now() - interval '79 days', now() - interval '79 days'),
+  'RESOLVED', 'CRITICAL', now() - interval '80 days', now() - interval '79 days', now() - interval '79 days 18 hours'),
  (5, 2, 2, 4, 'Pipeline leak flooding the street',
   'A municipal water pipeline is leaking continuously and flooding the street. Large volume of drinking water is being wasted.',
-  'RESOLVED', 'HIGH',     now() - interval '75 days', now() - interval '74 days', now() - interval '74 days'),
+  'RESOLVED', 'HIGH',     now() - interval '75 days', now() - interval '74 days', now() - interval '74 days 20 hours'),
  (9, 2, 5, 4, 'Low water pressure in the whole lane',
   'Water pressure has dropped so low that it does not reach the overhead tank. The entire lane is affected, not just us.',
-  'RESOLVED', 'MEDIUM',   now() - interval '60 days', now() - interval '59 days', now() - interval '58 days'),
+  'RESOLVED', 'MEDIUM',   now() - interval '60 days', now() - interval '59 days', now() - interval '59 days 8 hours'),
 
 -- Solid Waste (dept 3)
  (3, 3, 1, 5, 'Garbage not collected for a week',
@@ -194,10 +199,10 @@ VALUES
 -- Street Lighting (dept 4)
  (8, 4, 4, 6, 'Street light not working near park',
   'The street light near the park entrance has not been working for two weeks. The stretch is completely dark at night.',
-  'RESOLVED', 'MEDIUM', now() - interval '50 days', now() - interval '48 days', now() - interval '47 days'),
+  'RESOLVED', 'MEDIUM', now() - interval '50 days', now() - interval '48 days', now() - interval '49 days'),
  (10,4, 6, 6, 'Flickering street lamp whole night',
   'A street lamp on our road flickers continuously the whole night. It is both annoying and clearly faulty wiring.',
-  'RESOLVED', 'LOW',    now() - interval '45 days', now() - interval '43 days', now() - interval '42 days'),
+  'RESOLVED', 'LOW',    now() - interval '45 days', now() - interval '43 days', now() - interval '44 days 6 hours'),
 
 -- Parks (dept 5)
  (6, 5, 3, 7, 'Overgrown trees blocking footpath',
@@ -210,10 +215,10 @@ VALUES
 -- Stormwater Drains (dept 6)
  (2, 6, 1, 8, 'Storm drain blocked and overflowing',
   'The storm water drain at the junction is blocked with silt and plastic. It overflows onto the road whenever it rains.',
-  'RESOLVED', 'HIGH',   now() - interval '35 days', now() - interval '33 days', now() - interval '33 days'),
+  'RESOLVED', 'HIGH',   now() - interval '35 days', now() - interval '33 days', now() - interval '34 days 4 hours'),
  (7, 6, 4, 8, 'Open drain without cover',
   'A section of the storm water drain has no cover slab. It is an open hazard right next to where children walk to school.',
-  'RESOLVED', 'CRITICAL', now() - interval '30 days', now() - interval '28 days', now() - interval '28 days');
+  'RESOLVED', 'CRITICAL', now() - interval '30 days', now() - interval '28 days', now() - interval '29 days 18 hours');
 
 
 -- ---------------------------------------------------------------------
