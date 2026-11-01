@@ -67,7 +67,10 @@ BEGIN
         v_arr[1] := 1;
     END IF;
 
-    RETURN v_arr::TEXT::VECTOR(384);
+    -- Cast the array straight to a vector. Going through ::TEXT would
+    -- produce Postgres array syntax {..}, which pgvector rejects: its
+    -- text format is [..].
+    RETURN v_arr::VECTOR(384);
 END;
 $$;
 

@@ -93,7 +93,10 @@ BEGIN
     BEGIN
         DELETE FROM ward WHERE ward_id = 1;
         v_ok := FALSE;
-    EXCEPTION WHEN foreign_key_violation THEN v_ok := TRUE;
+    -- PostgreSQL 16 reports a RESTRICT violation as foreign_key_violation
+    -- (23503); PostgreSQL 18 reports it as restrict_violation (23001).
+    -- Accept either, so the test is correct on both versions.
+    EXCEPTION WHEN foreign_key_violation OR restrict_violation THEN v_ok := TRUE;
     END;
     PERFORM test_report('T1.7 ward delete blocked while in use', v_ok);
 END $$;
