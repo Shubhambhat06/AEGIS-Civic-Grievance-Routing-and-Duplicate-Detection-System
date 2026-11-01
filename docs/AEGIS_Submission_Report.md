@@ -34,7 +34,7 @@ AEGIS addresses both by storing every complaint description as a 384-dimension v
 
 The system uses **PostgreSQL 16** for the structured entities, where referential integrity, constraints and transactions are essential, and **pgvector** for the complaint text, where relational decomposition offers nothing and semantic similarity is the required operation. Seven advanced database features are implemented: transactions with explicit row locking, triggers, stored functions, views and a materialized view, B-tree/GIN/HNSW/partial indexing, full-text search, and vector similarity search. A **Next.js 16** application provides role-based access for Citizens, Staff and Admins.
 
-The project goes beyond CRUD in a measurable way: the routing and deduplication engine is the product, and the forms around it merely feed it. Routing accuracy, duplicate-detection quality, constraint enforcement, transaction rollback and concurrency safety were all measured rather than asserted — **33 database tests, 29 API tests, a two-session concurrency race and a 78-check consistency audit, all passing.**
+The project goes beyond CRUD in a measurable way: the routing and deduplication engine is the product, and the forms around it merely feed it. Routing accuracy, duplicate-detection quality, constraint enforcement, transaction rollback and concurrency safety were all measured rather than asserted — **33 database tests, 36 API tests, a two-session concurrency race and a 92-check consistency audit, all passing.**
 
 ---
 
@@ -43,7 +43,7 @@ The project goes beyond CRUD in a measurable way: the routing and deduplication 
 | Layer | Technology | Why |
 |---|---|---|
 | Frontend | Next.js 16.4.3 (App Router), React 19 | Required by the specification; App Router keeps pages and API routes in one project |
-| Styling | Plain CSS | No framework needed for three pages; keeps the dependency list small |
+| Styling | Plain CSS, Noto Sans (English and Devanagari) | Design language of Indian government portals, after the Government of India's UX4G design system: deep blue masthead, tricolour band, saffron emphasis, bilingual title, text-size and skip-link accessibility controls. A fictional, clearly labelled demonstration: no State Emblem and no real government body's name |
 | Backend / API | Next.js Route Handlers | The specification's suggested backend layer; no separate server process |
 | Database driver | `pg` (node-postgres) with a pooled connection | Parameterised queries, which is what makes SQL injection impossible |
 | Relational database | PostgreSQL 16 | Mandatory SQL database (specification requirement 3) |
@@ -54,7 +54,7 @@ The project goes beyond CRUD in a measurable way: the routing and deduplication 
 | Testing | Bash and Python harnesses, Playwright for screenshots | 62 automated tests plus a consistency audit |
 | Version control | Git + GitHub | Requirement 15 |
 
-**Production npm dependencies: five** — `next`, `react`, `react-dom`, `pg`, `bcryptjs`. `npm audit` reports **0 vulnerabilities**.
+**Production npm dependencies: seven** — `next`, `react`, `react-dom`, `pg`, `bcryptjs`, and the two `@fontsource-variable/noto-sans` packages, which bundle Noto Sans and Noto Sans Devanagari locally so the Docker build needs no access to Google Fonts. Charts are hand-built in HTML, so there is no chart library. `npm audit` reports **0 vulnerabilities**.
 
 ### 4.1 How to run it
 
@@ -74,8 +74,8 @@ Sample accounts (all use the password `password123`):
 | Role | Email |
 |---|---|
 | Citizen | `arjun.menon@example.com` |
-| Staff | `roads1@bbmp.gov.in` |
-| Admin | `admin@bbmp.gov.in` |
+| Staff | `roads1@aegis.example` |
+| Admin | `admin@aegis.example` |
 
 To re-seed after changing any SQL file, `docker compose down -v` then `up` again — the `-v` is what deletes the data volume, and forgetting it is the most common reason a schema change appears to do nothing.
 
@@ -412,11 +412,18 @@ aegis-project/
 │   ├── .dockerignore
 │   ├── .env.example            local (non-Docker) configuration template
 │   ├── next.config.mjs         standalone output for a slim image
-│   ├── package.json            5 production dependencies
+│   ├── package.json            7 production dependencies
 │   │
 │   ├── lib/
 │   │   ├── db.js               pooled pg client, parameterised query helper
 │   │   └── auth.js             bcrypt login, HMAC session cookie, role guard
+│   │
+│   ├── components/
+│   │   ├── SiteHeader.jsx      header and navigation for the signed-in role
+│   │   ├── RouteRail.jsx       the four-stop progress rail for a complaint
+│   │   ├── Deadline.jsx        time left against the service deadline
+│   │   ├── charts.jsx          dependency-free bar and column charts
+│   │   └── format.js           plain-language status labels, dates
 │   │
 │   └── app/                    App Router
 │       ├── layout.jsx          shared shell
@@ -425,6 +432,7 @@ aegis-project/
 │       ├── citizen/page.jsx    /citizen  file and track complaints
 │       ├── staff/page.jsx      /staff    work queue, duplicate review, merge
 │       ├── admin/page.jsx      /admin    department performance dashboard
+│       ├── about/page.jsx      /about    help, accessibility, privacy, terms
 │       │
 │       └── api/                Route Handlers
 │           ├── auth/login/route.js        POST   sign in
@@ -437,7 +445,10 @@ aegis-project/
 │           │                              GET    vector similarity search
 │           │                              POST   merge into a parent
 │           ├── search/route.js            GET    full-text search
-│           └── dashboard/route.js         GET    statistics (admin only)
+│           ├── dashboard/route.js         GET    statistics (admin only)
+│           ├── auth/me/route.js           GET    who is signed in
+│           ├── public/stats/route.js      GET    headline counts (no sign-in)
+│           └── admin/escalate/route.js    POST   run the SLA sweep (admin only)
 │
 ├── db/
 │   ├── 01_schema.sql           tables, types, constraints, indexes, views
@@ -478,15 +489,15 @@ All nine screenshots are in `docs/screenshots/`, captured from a running instanc
 
 | File | What it shows |
 |---|---|
-| `01-login.png` | Sign-in form with the Citizen / Staff selector |
-| `02-citizen-file.png` | A complaint being filed, with the tracker beside it |
-| `03-citizen-submitted.png` | Confirmation, and the complaint appearing in the tracker |
-| `04-citizen-merged.png` | **A merged complaint still tracking its parent** — "Same issue as #15 … now ROUTED" |
-| `05-staff-queue.png` | The Roads department queue, sorted by SLA urgency |
-| `06-staff-duplicates.png` | **Similarity search flagging the duplicate at 75%** |
-| `07-staff-merged.png` | Merge confirmed, the duplicate removed from the queue |
-| `08-admin-dashboard.png` | Department performance and most-duplicated issues |
-| `09-admin-all-queue.png` | **Cross-department queue with breached SLAs in red** |
+| `01-login.png` | Landing page: what the service does, the four-stop route a complaint travels, live figures, and sign-in with one-click sample accounts |
+| `02-citizen-file.png` | A citizen describing a problem in their own words |
+| `03-citizen-submitted.png` | **Routed on filing**: "Sent to Roads and Infrastructure", with a note that similar reports already exist in the ward |
+| `04-citizen-merged.png` | **A joined report still tracking the earlier one**: the route rail stops at "Joined to AEG/00015" and shows that grievance's current status |
+| `05-staff-queue.png` | The Roads department queue, most urgent first, with a deadline meter on every row |
+| `06-staff-duplicates.png` | **The repeat-report check**: the earlier pothole report at 77%, "Very likely the same", with a one-click join |
+| `07-staff-merged.png` | Join confirmed, the repeat report removed from the queue |
+| `08-admin-dashboard.png` | City overview: complaints by department, time to resolve against each department's target, weekly volume, status breakdown, wards, and problems reported more than once |
+| `09-admin-all-queue.png` | **Every department's queue after the SLA check**: the two overdue complaints escalated and shown in red |
 
 ### 8.1 The live demo
 
@@ -499,15 +510,13 @@ docker compose exec -e PGHOST=/var/run/postgresql db bash /aegis-scripts/demo.sh
 The capture run produced this sequence end to end:
 
 ```
-2. citizen files a new complaint
-   Complaint #30 submitted.
-3. running the embedding pipeline
-   complaint #30 auto-routed to: Roads and Infrastructure
-5. staff queue and duplicate detection
-   2 duplicate candidate(s) shown
-   merged; #15 duplicate_count 3 -> 4
-6. admin dashboard
-   2 complaint(s) past their SLA deadline
+2. citizen lodges a grievance
+   grievance registered as AEG/00025
+   (confirmation: sent to Roads and Infrastructure; 2 similar reports in the ward)
+4. staff queue and repeat-report check
+   AEG/00025 joined to the earlier report
+5. administrator
+   overdue check escalated the 2 grievances past their deadline
 ```
 
 That is the whole product in six lines: a citizen filed a complaint in free text, the pipeline embedded it, a trigger routed it to the correct department with no dropdown involved, similarity search recognised it as the same pothole already on file, and merging it incremented the parent's report count.
@@ -515,9 +524,9 @@ That is the whole product in six lines: a citizen filed a complaint in free text
 **Suggested demonstration order (about five minutes):**
 
 1. Sign in as a citizen and file a pothole complaint worded differently from the existing ones.
-2. Run the embedding pipeline — `docker compose exec db psql -U aegis -d aegis -f /aegis-scripts/embed_demo.sql` — and point out that the complaint has acquired a department without anyone choosing one.
-3. Sign in as staff, click **Check duplicates**, and show the similarity percentage against the existing report.
-4. Merge, and show the parent's report counter increment.
+2. Point out the confirmation: the complaint was sent to a department the moment it was filed, without anyone choosing one. (The demonstration build embeds new complaints inline, controlled by `DEMO_EMBEDDINGS`; in production `scripts/embed.py` does it asynchronously.)
+3. Sign in as staff, select the new complaint in the queue, and show the similarity percentage against the earlier report under "Is this a repeat of an earlier report?".
+4. Choose **Join to this one**, confirm, and show the earlier grievance's Reports count go up.
 5. Sign back in as the first citizen and show that their complaint now tracks the parent issue rather than vanishing.
 6. Sign in as admin and show the dashboard, the overdue complaints in red, and the most-duplicated issues table.
 
@@ -574,9 +583,9 @@ Keep commit authorship matching this table so the GitHub history corroborates it
 | Suite | Result | Covers |
 |---|---|---|
 | `db/05_test.sql` | **33 / 33 passed** | Constraints, triggers, transaction rollback, search, views, SLA escalation, cascades, CTE and window-function results |
-| `scripts/api_test.sh` | **29 / 29 passed** | Authentication, role-based authorisation, both workflows, search, logout |
+| `scripts/api_test.sh` | **36 / 36 passed** | Authentication, role-based authorisation, both workflows, search, logout, and the endpoints added with the interface: public figures expose no personal data, the SLA sweep is admin-only, and a new complaint is routed on filing |
 | `scripts/concurrency_test.sh` | **PASS** | Two-session merge race; exactly one merge took effect |
-| `scripts/audit.py` | **78 / 78 passed** | Documented figures vs the live schema; named objects exist; security properties; seed-data invariants; diagram matches the database |
+| `scripts/audit.py` | **92 / 92 passed** | Documented figures vs the live schema; named objects exist; security properties; seed-data invariants; diagram matches the database |
 | `npm audit` | **0 vulnerabilities** | Production dependency tree |
 
 Seven of the database tests pass *because the database refused to do something* — the only way to show a constraint is enforced rather than merely declared.

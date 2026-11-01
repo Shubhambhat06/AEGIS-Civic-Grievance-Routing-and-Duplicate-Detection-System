@@ -145,6 +145,7 @@ Illegal transitions (for example reopening a closed complaint, or moving to `IN_
 | Vector search | [pgvector](https://github.com/pgvector/pgvector), `VECTOR(384)`, HNSW index, cosine distance |
 | Embedding model | `sentence-transformers/all-MiniLM-L6-v2` |
 | Web app and API | Next.js 16 (App Router), React 19 |
+| Interface | Indian government portal style after UX4G: tricolour band, bilingual title, Noto Sans, text-size controls (fictional demo, no State Emblem) |
 | DB driver | `pg` (node-postgres) |
 | Auth | `bcryptjs` + HMAC-signed session cookie |
 | Containers | Docker Compose (`pgvector/pgvector:pg16` + Next.js standalone image) |
@@ -329,10 +330,10 @@ All seeded accounts use the password `password123`.
 | Role | Email | What you see |
 |---|---|---|
 | Citizen | `arjun.menon@example.com` | File complaints, track your own |
-| Staff | `roads1@bbmp.gov.in` | Roads department queue, duplicate merging |
-| Admin | `admin@bbmp.gov.in` | All departments plus the performance dashboard |
+| Staff | `roads1@aegis.example` | Roads department queue, duplicate merging |
+| Admin | `admin@aegis.example` | All departments plus the performance dashboard |
 
-> 🎯 **Try this first:** sign in as a **citizen** and file a pothole complaint worded differently from the existing ones. Run the embedding pipeline (see the demo below), then sign in as **staff** and click **"Check duplicates"** on it. That is the feature the whole project is built around.
+> 🎯 **Try this first:** on the sign-in page, choose the sample **Citizen** account and lodge a pothole grievance in your own words. The confirmation gives you a registration number (for example AEG/00025) and tells you straight away which department it went to and whether similar reports exist. Then sign out, choose **Department officer**, and select your grievance in the queue to see the earlier report it matches. That is the feature the whole project is built around.
 
 ---
 
@@ -346,20 +347,18 @@ This runs inside the database container, so it works from any shell, including W
 
 Seven steps, each printing real database output: the duplicate cluster, vector similarity finding it, automatic routing, the merge transaction, SLA escalation, the constraints refusing bad data, and the trigger-written audit trail. Press Enter to advance, or set `NOPAUSE=1` to run straight through.
 
-A complaint filed through the web interface is not embedded until the pipeline runs, exactly as in production. Without Python, run the SQL-only equivalent:
+**Routing on filing.** In this demonstration build, a complaint filed through the web interface is embedded immediately with the SQL demo embedding, which fires the routing trigger, so the citizen sees the department straight away. This is controlled by `DEMO_EMBEDDINGS` (on by default in `docker-compose.yml`). With it set to `false`, complaints wait for the pipeline as they would in production: run `scripts/embed.py` for the real model, or the SQL-only equivalent:
 
 ```bash
 docker compose exec db psql -U aegis -d aegis -f /aegis-scripts/embed_demo.sql
 ```
 
-Inserting the embedding fires the routing trigger, so the new complaint gets a department as a side effect.
-
 **Suggested five-minute demonstration**
 
 1. Sign in as a citizen and file a pothole complaint worded differently from the existing ones.
-2. Run the embedding pipeline and point out that the complaint now has a department, with no dropdown involved.
-3. Sign in as staff, click **Check duplicates**, and show the similarity percentage against the existing report.
-4. Merge, and show the parent's report counter go up.
+2. Point out the confirmation: the complaint already has a department, and no dropdown was involved.
+3. Sign in as staff, select the new complaint in the queue, and show the similarity percentage against the earlier report under "Is this a repeat of an earlier report?".
+4. Choose **Join to this one**, confirm, and show the earlier grievance's Reports count go up.
 5. Sign back in as the first citizen and show that their complaint now tracks the parent issue instead of disappearing.
 6. Sign in as admin and show the dashboard, the overdue complaints in red, and the most-duplicated issues.
 
@@ -422,6 +421,9 @@ All routes are Next.js route handlers under `app/app/api/`. Every route other th
 | `POST` | `/api/complaints/[id]/duplicates` | Merge a duplicate into a parent (staff) |
 | `GET` | `/api/search` | Full-text search |
 | `GET` | `/api/dashboard` | Per-department statistics (admin only) |
+| `GET` | `/api/auth/me` | Who is signed in |
+| `GET` | `/api/public/stats` | Headline counts for the landing page; no sign-in, no personal data |
+| `POST` | `/api/admin/escalate` | Run the SLA sweep now (admin only) |
 
 ---
 
@@ -431,7 +433,7 @@ All routes are Next.js route handlers under `app/app/api/`. Every route other th
 |---|---|---|
 | **Database tests**: constraints, triggers, rollback, search, views, SLA, cascades, CTEs/windows | `bash scripts/run_tests.sh` | **33 / 33** |
 | **Concurrency test**: two sessions race to merge the same complaint | `bash scripts/concurrency_test.sh` | **PASS** |
-| **API tests**: auth, role-based access, both workflows, search, logout | see below | **29 / 29** |
+| **API tests**: auth, role-based access, both workflows, search, logout, interface endpoints | see below | **36 / 36** |
 | **Consistency audit**: docs, diagrams, Docker setup and screenshots vs the live schema | `python3 scripts/audit.py` | **92 / 92** |
 
 `run_tests.sh` creates a throwaway database, runs all six SQL files, and reports PASS/FAIL per check.

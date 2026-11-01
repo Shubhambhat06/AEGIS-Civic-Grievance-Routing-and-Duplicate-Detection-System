@@ -540,7 +540,7 @@ Note that the negative tests are the important ones. Seven of these tests pass *
 
 ### 13.2 API tests — `scripts/api_test.sh`
 
-**29 of 29 passed**, against a production build of the app on a seeded database.
+**36 of 36 passed**, against a production build of the app on a seeded database.
 
 | Group | Tests | Result | What it proves |
 |---|---|---|---|
@@ -550,6 +550,7 @@ Note that the negative tests are the important ones. Seven of these tests pass *
 | D. Staff workflow | 6 | 6 pass | Queue loads; duplicate search returns candidates; self-merge and merge-into-merged return 409 from the stored function; a staff member gets 404 updating another department's complaint; an invalid status value is rejected |
 | E. Search | 3 | 3 pass | Full-text search returns matches and requires a session |
 | F. Logout | 2 | 2 pass | The session is invalid immediately after logout |
+| G. Interface endpoints | 7 | 7 pass | Public figures need no sign-in and contain no names or complaint text; the SLA sweep refuses signed-out users (401) and ordinary staff (403); a new complaint is routed to a department as soon as it is filed |
 
 ### 13.3 Routing accuracy
 
@@ -567,7 +568,7 @@ The routing function itself weights each neighbour by the **square** of its simi
 
 ### 13.4b Consistency audit — `scripts/audit.py`
 
-**59 of 59 passed.** This is the check that stops the write-up from drifting away from the code. It reseeds a throwaway database and then verifies that every object count quoted in section 8 matches reality, that every function, trigger, index and view named anywhere in this document actually exists, that the security requirements hold in the app source (no hard-coded connection string, no string-concatenated SQL, bcrypt in use, `httpOnly` cookies, `.env.local` git-ignored), that the seed data is internally consistent (no orphaned merge links, no complaint that is its own parent, the denormalised counter correct), and that the relational schema diagram matches the live database table for table and key for key.
+**92 of 92 passed.** This is the check that stops the write-up from drifting away from the code. It reseeds a throwaway database and then verifies that every object count quoted in section 8 matches reality, that every function, trigger, index and view named anywhere in this document actually exists, that the security requirements hold in the app source (no hard-coded connection string, no string-concatenated SQL, bcrypt in use, `httpOnly` cookies, `.env.local` git-ignored), that the seed data is internally consistent (no orphaned merge links, no complaint that is its own parent, the denormalised counter correct), and that the relational schema diagram matches the live database table for table and key for key.
 
 ### 13.5 How to re-run everything
 

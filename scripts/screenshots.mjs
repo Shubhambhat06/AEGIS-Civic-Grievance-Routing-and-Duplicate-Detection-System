@@ -2,156 +2,104 @@
 // AEGIS - capture application screenshots for the project report.
 //
 // Drives a real Chromium browser through the whole demo flow and saves
-// a PNG at each step into docs/screenshots/.
-//
-// Prerequisites:
-//   - the database is seeded (bash scripts/run_tests.sh, or docker compose up)
-//   - the app is running
+// a PNG at each step into docs/screenshots/. Run it against a freshly
+// seeded database so the numbers match the write-up.
 //
 // Usage:
-//   npm install playwright          (once)
+//   npm install playwright && npx playwright install chromium
 //   BASE=http://localhost:3000 node scripts/screenshots.mjs
 // =====================================================================
 import { chromium } from 'playwright';
-import { execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 
 const BASE = process.env.BASE ?? 'http://localhost:3000';
 const OUT = process.env.OUT ?? 'docs/screenshots';
-const PSQL = process.env.PSQL_CMD ?? 'psql';
-const PSQL_ARGS = (process.env.PSQL_ARGS ?? '-h /tmp -p 5433 -U postgres -d aegis_test').split(' ');
-
 mkdirSync(OUT, { recursive: true });
 
-function sql(statement) {
-  return execFileSync(PSQL, [...PSQL_ARGS, '-X', '-tA', '-c', statement], {
-    encoding: 'utf8',
-  }).trim();
-}
+const browser = await chromium.launch();
+const ctx = await browser.newContext({ viewport: { width: 1366, height: 900 } });
+const page = await ctx.newPage();
 
-async function shot(page, name, label) {
+async function shot(name, label) {
+  await page.waitForTimeout(300);
   await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
   console.log(`  saved ${name}.png   ${label}`);
 }
 
-const browser = await chromium.launch();
-const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+async function signInAs(role) {
+  await page.goto(BASE, { waitUntil: 'networkidle' });
+  await page.locator('.demo-list button', { hasText: role }).click();
+}
+
+async function signOut() {
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  await page.waitForURL(BASE + '/');
+}
 
 try {
-  // ---------------------------------------------------------------
-  console.log('1. login page');
-  const page = await ctx.newPage();
+  console.log('1. landing page');
   await page.goto(BASE, { waitUntil: 'networkidle' });
-  await shot(page, '01-login', 'sign-in form with the role selector');
+  await page.waitForSelector('.figure .value');
+  await shot('01-login', 'how the service works, live figures, sign-in');
 
-  // ---------------------------------------------------------------
-  console.log('2. citizen files a new complaint');
-  await page.selectOption('#userType', 'citizen');
-  await page.fill('#email', 'arjun.menon@example.com');
-  await page.fill('#password', 'password123');
-  await page.click('button[type="submit"]');
+  console.log('2. citizen lodges a grievance');
+  await signInAs('Citizen');
   await page.waitForURL('**/citizen');
-  await page.waitForSelector('table');
-
-  await page.fill('#title', 'Yet another pothole by the bus stop');
+  await page.waitForSelector('.complaint-item');
+  await page.fill('#title', 'Pothole by the bus stop is getting worse');
   await page.fill(
     '#description',
-    'The same deep pothole next to the bus stop on the main road is still there and getting worse after the rain.'
+    'The deep pothole on the main road next to the bus stop is bigger after the rain and bikes keep swerving into traffic.'
   );
-  await page.selectOption('#priority', 'HIGH');
-  await shot(page, '02-citizen-file', 'complaint being filed, tracker beside it');
+  await page.click('label[for="prio-HIGH"]');
+  await shot('02-citizen-file', 'report form filled in');
 
   await page.click('button[type="submit"]');
-  await page.waitForSelector('.success');
-  const confirmation = await page.textContent('.success');
-  console.log(`   ${confirmation.trim()}`);
-  await shot(page, '03-citizen-submitted', 'complaint accepted, appears in the tracker');
+  await page.waitForSelector('.notice.ok');
+  const reg = (await page.textContent('.notice.ok p strong')).trim();
+  console.log(`   grievance registered as ${reg}`);
+  await shot('03-citizen-submitted', 'routed straight away, similar reports flagged');
+  await signOut();
 
-  // ---------------------------------------------------------------
-  // The embedding pipeline is asynchronous. In production this is
-  // scripts/embed.py; for the demo it is the SQL equivalent. Running
-  // it also fires the auto-routing trigger.
-  console.log('3. running the embedding pipeline');
-  const newId = Number(confirmation.match(/#(\d+)/)[1]);
-  sql(`INSERT INTO complaint_embedding (complaint_id, embedding, model_name)
-       SELECT c.complaint_id, fn_demo_embedding(c.title || ' ' || c.description), 'demo-hashing-384'
-       FROM complaint c
-       WHERE NOT EXISTS (SELECT 1 FROM complaint_embedding e WHERE e.complaint_id = c.complaint_id)`);
-  const routed = sql(
-    `SELECT COALESCE(d.dept_name,'(unrouted)') FROM complaint c
-      LEFT JOIN department d ON d.dept_id=c.dept_id WHERE c.complaint_id=${newId}`
-  );
-  console.log(`   complaint #${newId} auto-routed to: ${routed}`);
+  console.log('3. citizen whose report was joined to an earlier one');
+  await page.getByRole('radio', { name: 'Citizen' }).check({ force: true });
+  await page.fill('#email', 'divya.rao@example.com');
+  await page.fill('#password', 'password123');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await page.waitForURL('**/citizen');
+  await page.waitForSelector('.complaint-item');
+  await page.locator('.complaint-item summary').first().click();
+  await shot('04-citizen-merged', 'joined report still tracks the earlier complaint');
+  await signOut();
 
-  // ---------------------------------------------------------------
-  console.log('4. citizen whose complaint was merged as a duplicate');
-  const p2 = await ctx.newPage();
-  await p2.goto(BASE, { waitUntil: 'networkidle' });
-  await p2.selectOption('#userType', 'citizen');
-  await p2.fill('#email', 'divya.rao@example.com');
-  await p2.fill('#password', 'password123');
-  await p2.click('button[type="submit"]');
-  await p2.waitForURL('**/citizen');
-  await p2.waitForSelector('table');
-  await shot(p2, '04-citizen-merged', 'merged complaint still tracks its parent issue');
-  await p2.close();
+  console.log('4. staff queue and repeat-report check');
+  await signInAs('Department officer');
+  await page.waitForURL('**/staff');
+  await page.waitForSelector('tbody tr');
+  await shot('05-staff-queue', 'department queue, most urgent first');
 
-  // ---------------------------------------------------------------
-  console.log('5. staff queue and duplicate detection');
-  const p3 = await ctx.newPage();
-  await p3.goto(BASE, { waitUntil: 'networkidle' });
-  await p3.selectOption('#userType', 'staff');
-  await p3.fill('#email', 'roads1@bbmp.gov.in');
-  await p3.fill('#password', 'password123');
-  await p3.click('button[type="submit"]');
-  await p3.waitForURL('**/staff');
-  await p3.waitForSelector('table tbody tr');
-  await shot(p3, '05-staff-queue', 'Roads department queue, sorted by SLA urgency');
+  await page.locator('tbody tr', { hasText: 'Pothole by the bus stop' }).first().click();
+  await page.waitForSelector('.match');
+  await shot('06-staff-duplicates', 'earlier reports ranked by similarity of meaning');
 
-  // click "Check duplicates" on the row for the complaint just filed
-  const row = p3.locator('tbody tr', { hasText: 'Yet another pothole' }).first();
-  if (await row.count()) {
-    await row.getByRole('button', { name: 'Check duplicates' }).click();
-    await p3.waitForSelector('.card');
-    await shot(p3, '06-staff-duplicates', 'similarity search flags the existing pothole report');
+  await page.locator('.match').first().getByRole('button', { name: 'Join to this one' }).click();
+  await page.getByRole('button', { name: 'Confirm join' }).click();
+  await page.waitForSelector('.notice.ok');
+  console.log(`   ${reg} joined to the earlier report`);
+  await shot('07-staff-merged', 'joined, removed from the queue');
+  await signOut();
 
-    const candidates = await p3.locator('.card tbody tr').count();
-    console.log(`   ${candidates} duplicate candidate(s) shown`);
+  console.log('5. administrator');
+  await signInAs('Administrator');
+  await page.waitForURL('**/admin');
+  await page.waitForSelector('.hbars');
+  await shot('08-admin-dashboard', 'department performance and repeat reports');
 
-    if (candidates > 0) {
-      const before = sql(`SELECT duplicate_count FROM complaint WHERE complaint_id=15`);
-      await p3.locator('.card tbody tr').first()
-        .getByRole('button', { name: 'Merge into this' }).click();
-      await p3.waitForSelector('.success');
-      const after = sql(`SELECT duplicate_count FROM complaint WHERE complaint_id=15`);
-      console.log(`   merged; #15 duplicate_count ${before} -> ${after}`);
-      await shot(p3, '07-staff-merged', 'merge confirmed, duplicate removed from the queue');
-    }
-  } else {
-    console.log('   WARNING: the new complaint is not in this queue');
-  }
-  await p3.close();
-
-  // ---------------------------------------------------------------
-  console.log('6. admin dashboard');
-  const p4 = await ctx.newPage();
-  await p4.goto(BASE, { waitUntil: 'networkidle' });
-  await p4.selectOption('#userType', 'staff');
-  await p4.fill('#email', 'admin@bbmp.gov.in');
-  await p4.fill('#password', 'password123');
-  await p4.click('button[type="submit"]');
-  await p4.waitForURL('**/admin');
-  await p4.waitForSelector('table');
-  await shot(p4, '08-admin-dashboard', 'department performance and most-duplicated issues');
-
-  // An ADMIN is not restricted to one department, so the same staff
-  // queue shows every ward and the overdue complaints in red.
-  await p4.goto(BASE + '/staff', { waitUntil: 'networkidle' });
-  await p4.waitForSelector('tbody tr');
-  const breached = await p4.locator('td.breached').count();
-  console.log(`   ${breached} complaint(s) past their SLA deadline`);
-  await shot(p4, '09-admin-all-queue', 'cross-department queue, breached SLAs in red');
-  await p4.close();
+  await page.getByRole('button', { name: 'Check for overdue grievances' }).click();
+  await page.waitForSelector('.notice[role="status"]');
+  await page.goto(BASE + '/staff', { waitUntil: 'networkidle' });
+  await page.waitForSelector('tbody tr');
+  await shot('09-admin-all-queue', 'every department, overdue complaints escalated');
 
   console.log('\nAll screenshots written to ' + OUT);
 } finally {

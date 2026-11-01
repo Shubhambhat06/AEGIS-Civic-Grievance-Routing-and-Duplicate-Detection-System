@@ -49,12 +49,12 @@ check "A4 citizen login -> 200" \
 # A5 valid staff login
 check "A5 staff login -> 200" \
       "$(code -c "$JAR/staff" -X POST "$BASE/api/auth/login" -H 'Content-Type: application/json' \
-         -d '{"email":"roads1@bbmp.gov.in","password":"password123","userType":"staff"}')" 200
+         -d '{"email":"roads1@aegis.example","password":"password123","userType":"staff"}')" 200
 
 # A6 valid admin login
 check "A6 admin login -> 200" \
       "$(code -c "$JAR/admin" -X POST "$BASE/api/auth/login" -H 'Content-Type: application/json' \
-         -d '{"email":"admin@bbmp.gov.in","password":"password123","userType":"staff"}')" 200
+         -d '{"email":"admin@aegis.example","password":"password123","userType":"staff"}')" 200
 
 # A7 a forged cookie must be rejected (HMAC signature check)
 check "A7 tampered session cookie -> 401" \
@@ -171,6 +171,32 @@ check "E1b search returns matches" "$([ "$M" -gt 0 ] && echo ok || echo none)" o
 check "E2 search without session -> 401" \
       "$(code "$BASE/api/search?q=pothole")" 401
 
+
+echo ""
+echo "--- Group G: endpoints added with the redesign ---"
+
+# G1 public figures need no sign-in and expose only counts
+check "G1 public stats without session -> 200" \
+      "$(code "$BASE/api/public/stats")" 200
+check "G1b public stats contain no names or text" \
+      "$(grep -ciE 'email|full_name|title|description' /tmp/_body)" 0
+
+# G2 who-am-I is a normal answer when signed out
+check "G2 /api/auth/me signed out -> 200" "$(code "$BASE/api/auth/me")" 200
+
+# G3 the SLA sweep is admin-only
+check "G3 escalate without session -> 401" \
+      "$(code -X POST "$BASE/api/admin/escalate")" 401
+check "G3b escalate as staff -> 403" \
+      "$(code -b "$JAR/staff" -X POST "$BASE/api/admin/escalate")" 403
+check "G3c escalate as admin -> 200" \
+      "$(code -b "$JAR/admin" -X POST "$BASE/api/admin/escalate")" 200
+
+# G4 filing a complaint routes it straight away (demo embedding)
+code -b "$JAR/citizen" -X POST "$BASE/api/complaints" -H 'Content-Type: application/json' \
+     -d '{"title":"Water pipe leaking on the corner","description":"Clean drinking water has been leaking from a municipal pipeline on the corner since morning."}' >/dev/null
+DEPT=$(python3 -c "import json;print(json.load(open('/tmp/_body')).get('department') or 'none')" 2>/dev/null || echo none)
+check "G4 new complaint is routed on filing" "$([ "$DEPT" != none ] && echo routed || echo none)" routed
 
 echo ""
 echo "--- Group F: logout ---"
