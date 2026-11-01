@@ -1,19 +1,21 @@
+import '@fontsource-variable/noto-sans';
+import '@fontsource-variable/noto-sans-devanagari';
 import './globals.css';
+import SiteHeader from '@/components/SiteHeader';
+import Footer from '@/components/Footer';
 
 export const metadata = {
-  title: 'AEGIS - Civic Grievance Portal',
-  description: 'File, track and resolve municipal complaints',
+  title: 'AEGIS - Municipal Grievance Redressal Portal (demonstration)',
+  description: 'Lodge civic grievances, track them, and see how the city responds. A student demonstration project.',
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body>
-        <header className="site-header">
-          <strong>AEGIS</strong>
-          <span className="tagline">Civic Grievance Routing</span>
-        </header>
-        <main className="container">{children}</main>
+        <SiteHeader />
+        <main id="main-content" tabIndex={-1} className="wrap">{children}</main>
+        <Footer />
       </body>
     </html>
   );
